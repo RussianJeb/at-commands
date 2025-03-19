@@ -76,25 +76,32 @@ impl<'a, D> CommandParser<'a, D> {
             return self;
         }
 
-        // empty identifier is always valid
+        // If the buffer is empty, we can't match anything, but that's OK for optional
         if self.buffer[self.buffer_index..].is_empty() {
             return self;
         }
 
-        if self.buffer[self.buffer_index..].len() < identifier.len() {
-            self.data_valid = false;
-            return self;
+        // Check if the identifier could potentially match (enough characters left)
+        if self.buffer[self.buffer_index..].len() >= identifier.len() {
+            // Create a slice that's exactly the length of the identifier
+            let slice_to_check =
+                &self.buffer[self.buffer_index..(self.buffer_index + identifier.len())];
+
+            // Check if it matches the identifier
+            let matches = slice_to_check
+                .iter()
+                .zip(identifier)
+                .all(|(buffer, id)| *buffer == *id);
+
+            // If it matches, advance the index
+            if matches {
+                self.buffer_index += identifier.len();
+                return self.trim_space();
+            }
         }
 
-        // Zip together the identifier and the buffer data. If all bytes are the same, the data is valid.
-        self.data_valid = self.buffer[self.buffer_index..]
-            .iter()
-            .zip(identifier)
-            .all(|(buffer, id)| *buffer == *id);
-        // Advance the index
-        self.buffer_index += identifier.len();
-
-        self.trim_space()
+        // If we get here, the identifier wasn't found, but that's OK because it's optional
+        self
     }
 
     /// Moves the internal buffer index over the next bit of space characters, if any
@@ -562,7 +569,7 @@ mod tests {
             .expect_optional_int_parameter()
             .expect_optional_string_parameter()
             .expect_optional_int_parameter()
-            .expect_optional_identifier(b"\r\nOK\r\n")
+            .expect_identifier(b"\r\nOK\r\n")
             .finish();
 
         assert_eq!(r, Err(ParseError(20)));
